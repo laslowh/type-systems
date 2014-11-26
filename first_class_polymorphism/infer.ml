@@ -249,13 +249,14 @@ let rec match_fun_ty num_params = function
 
 
 
-let rec infer env level = function
+let rec infer env level e = 
+	match e with
 	| Var name -> begin
 			try
-				Env.lookup env name
+				(e, Env.lookup env name)
 			with Not_found -> error ("variable " ^ name ^ " not found")
 		end
-	| Fun(param_list, body_expr) ->
+	| Fun(param_list, (body_expr,_)) ->
 			let fn_env_ref = ref env in
 			let var_list_ref = ref [] in
 			let param_ty_list = List.map
@@ -274,28 +275,34 @@ let rec infer env level = function
 					param_ty)
 				param_list
 			in
-			let inferred_return_ty = infer !fn_env_ref (level + 1) body_expr in
+			let (body_expr, inferred_return_ty) = infer !fn_env_ref (level + 1) body_expr in
 			let return_ty =
 				if is_annotated body_expr then inferred_return_ty
 				else instantiate (level + 1) inferred_return_ty in
+			let fun_ty = 
 			if not (List.for_all is_monomorphic !var_list_ref) then
 				error ("polymorphic parameter inferred: "
 					^ String.concat ", " (List.map string_of_ty !var_list_ref))
 			else
 				generalize level (TArrow(param_ty_list, return_ty))
-	| Let(var_name, value_expr, body_expr) ->
-			let var_ty = infer env (level + 1) value_expr in
-			infer (Env.extend env var_name var_ty) level body_expr
-	| Call(fn_expr, arg_list) ->
-			let fn_ty = instantiate (level + 1) (infer env (level + 1) fn_expr) in
+			in 
+			(Fun(param_list, (body_expr, return_ty)), fun_ty)
+	| Let(var_name, (value_expr, _), (body_expr, _)) ->
+			let (v, var_ty) = infer env (level + 1) value_expr in
+			let (b, inferred_type) = infer (Env.extend env var_name var_ty) level body_expr in
+			((Let (var_name, (v, var_ty), (b, inferred_type))), inferred_type)
+	| Call((fn_expr, _), arg_list) ->
+			let (fn_expr, fn_ty) = (infer env (level + 1) fn_expr) in
+			let fn_ty = instantiate (level + 1) fn_ty in
 			let param_ty_list, return_ty = match_fun_ty (List.length arg_list) fn_ty in
-			infer_args env (level + 1) param_ty_list arg_list ;
-			generalize level (instantiate (level + 1) return_ty)
-	| Ann(expr, ty_ann) ->
+			let inferred_args = infer_args env (level + 1) param_ty_list (List.map fst arg_list) in
+			let ty = generalize level (instantiate (level + 1) return_ty) in
+			((Call ((fn_expr, fn_ty), inferred_args)), ty)
+	| Ann((expr, _), ty_ann) ->
 			let _, ty = instantiate_ty_ann level ty_ann in
-			let expr_ty = infer env level expr in
+			let (expr, expr_ty) = infer env level expr in
 			subsume level ty expr_ty ;
-			ty
+			((Ann((expr, ty), ty_ann)), ty)
 
 and infer_args env level param_ty_list arg_list =
 	let pair_list = List.combine param_ty_list arg_list in
@@ -309,11 +316,12 @@ and infer_args env level param_ty_list arg_list =
 		(fun (ty1, arg1) (ty2, arg2) -> compare (get_ordering ty1 arg1) (get_ordering ty2 arg2))
 		pair_list
 	in
-	List.iter
-		(fun (param_ty, arg_expr) ->
-			let arg_ty = infer env level arg_expr in
+	let infer_arg (param_ty, arg_expr) =
+		let (arg_expr, arg_ty) = infer env level arg_expr in
 			if is_annotated arg_expr then
 				unify param_ty arg_ty
 			else
-				subsume level param_ty arg_ty)
-		sorted_pair_list
+			subsume level param_ty arg_ty;
+		(arg_expr, param_ty)
+	in
+	List.map infer_arg sorted_pair_list

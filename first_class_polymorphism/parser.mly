@@ -35,6 +35,8 @@ let replace_ty_constants_with_vars var_name_list ty =
 	in
 	(List.rev !var_id_list_rev_ref, f ty)
 
+let unbound = TVar (ref (Unbound(-1, 0)))
+
 %}
 
 %token <string> IDENT
@@ -44,7 +46,7 @@ let replace_ty_constants_with_vars var_name_list ty =
 %token EOF
 
 %start expr_eof
-%type <Expr.expr> expr_eof
+%type <Expr.texpr> expr_eof
 %start ty_eof
 %type <Expr.ty> ty_eof
 
@@ -58,16 +60,16 @@ ty_eof:
 
 expr:
 	| simple_expr                         { $1 }
-	| LET IDENT EQUALS expr IN expr       { Let($2, $4, $6) }
-	| FUN ARROW expr                      { Fun([], $3) }
-	| FUN param_list ARROW expr           { Fun($2, $4) }
-	| simple_expr COLON ty_ann            { Ann($1, $3) }
+	| LET IDENT EQUALS expr IN expr       { (Let($2, $4, $6), unbound) }
+	| FUN ARROW expr                      { (Fun([], $3), unbound) }
+	| FUN param_list ARROW expr           { (Fun($2, $4), unbound) }
+	| simple_expr COLON ty_ann            { (Ann($1, $3), unbound) }
 
 simple_expr:
-	| IDENT                                             { Var $1 }
+	| IDENT                                             { (Var $1, unbound) }
 	| LPAREN expr RPAREN                                { $2 }
-	| simple_expr LPAREN expr_comma_list RPAREN         { Call($1, $3) }
-	| simple_expr LPAREN RPAREN                         { Call($1, []) }
+	| simple_expr LPAREN expr_comma_list RPAREN         { (Call($1, $3), unbound) }
+	| simple_expr LPAREN RPAREN                         { (Call($1, []), unbound) }
 
 param_list:
 	| param               { [$1] }

@@ -55,6 +55,6 @@ let core =
 		(fun env declaration_str ->
 			let expr = Parser.expr_eof Lexer.token (Lexing.from_string declaration_str) in
 			match expr with
-				| Ann(Var name, ([], ty)) -> Env.extend env name ty
+				| (Ann((Var name, _), ([], ty)),_) -> Env.extend env name ty
 				| _ -> raise (Failure "expected a variable annotated by a complete type"))
 		Env.empty declaration_list

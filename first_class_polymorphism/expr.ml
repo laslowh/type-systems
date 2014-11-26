@@ -37,19 +37,20 @@ type ty_ann = id list * ty             (* type annotation: `some[a b] a -> b` *)
 
 type expr =
 	| Var of name                           (* variable *)
-	| Call of expr * expr list              (* application *)
-	| Fun of (name * ty_ann option) list * expr    (* abstraction *)
-	| Let of name * expr * expr             (* let *)
-	| Ann of expr * ty_ann                  (* type annotation: `1 : int` *)
+	| Call of texpr * texpr list              (* application *)
+	| Fun of (name * ty_ann option) list * texpr    (* abstraction *)
+	| Let of name * texpr * texpr             (* let *)
+	| Ann of texpr * ty_ann                  (* type annotation: `1 : int` *)
+and texpr = (expr * ty)
 
 let rec is_annotated = function
 	| Ann _ -> true
-	| Let(_, _, body) -> is_annotated body
+	| Let(_, _, (body, _)) -> is_annotated body
 	| _ -> false
 
 
 
-
+let type_of (_, (t:ty)) = t
 
 module IntMap = Map.Make (struct type t = int let compare = compare end)
 
@@ -106,9 +107,9 @@ let string_of_ty_ann (var_id_list, ty) : string =
 		| _ -> "some[" ^ String.concat " " name_list ^ "] " ^ ty_str
 
 
-let string_of_expr expr : string =
+let rec string_of_expr expr : string =
 	let rec complex = function
-		| Fun(param_list, body_expr) ->
+		| Fun(param_list, (body_expr,_)) ->
 				let param_list_str =
 					String.concat " "
 						(List.map
@@ -119,15 +120,18 @@ let string_of_expr expr : string =
 							param_list)
 				in
 				"fun " ^ param_list_str ^ " -> " ^ complex body_expr
-		| Let(var_name, value_expr, body_expr) ->
+		| Let(var_name, (value_expr,_), (body_expr,_)) ->
 				"let " ^ var_name ^ " = " ^ complex value_expr ^ " in " ^ complex body_expr
-		| Ann(expr, ty_ann) ->
+		| Ann((expr,_), ty_ann) ->
 				simple expr ^ " : " ^ string_of_ty_ann ty_ann
 		| expr -> simple expr
 	and simple = function
 		| Var name -> name
-		| Call(fn_expr, arg_list) ->
-				simple fn_expr ^ "(" ^ String.concat ", " (List.map complex arg_list) ^ ")"
+		| Call((fn_expr,_), arg_list) ->
+				simple fn_expr ^ "(" ^ String.concat ", " (List.map (fun x -> complex (fst x)) arg_list) ^ ")"
 		| expr -> "(" ^ complex expr ^ ")"
 	in
 	complex expr
+and string_of_texpr te : string =
+	let (e, t) = te in
+	"(" ^ (string_of_expr e) ^ ") : " ^ string_of_ty t

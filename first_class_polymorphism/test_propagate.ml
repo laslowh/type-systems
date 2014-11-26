@@ -158,10 +158,8 @@ let make_single_test_case (code, expected_result) =
 		Infer.reset_id () ;
 		let result =
 			try
-				let ty =
-					Propagate.infer Core.core 0 None Propagate.Generalized
-						(Parser.expr_eof Lexer.token (Lexing.from_string code))
-				in
+				let (expr, _) = (Parser.expr_eof Lexer.token (Lexing.from_string code)) in
+				let (_, ty) = Propagate.infer Core.core 0 None Propagate.Generalized expr in
 				OK (string_of_ty ty)
 			with Infer.Error msg ->
 				Fail (Some msg)
